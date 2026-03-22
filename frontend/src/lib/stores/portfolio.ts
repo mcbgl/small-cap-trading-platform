@@ -24,9 +24,9 @@ const initialState = {
 };
 
 function recalculate(positions: Position[], cash: number) {
-  const positionsValue = positions.reduce((sum, p) => sum + p.marketValue, 0);
+  const positionsValue = positions.reduce((sum, p) => sum + p.market_value, 0);
   const totalValue = cash + positionsValue;
-  const dailyPnl = positions.reduce((sum, p) => sum + p.dayChange * p.quantity, 0);
+  const dailyPnl = positions.reduce((sum, p) => sum + p.day_change * p.qty, 0);
   const dailyPnlPercent = totalValue > 0 ? (dailyPnl / totalValue) * 100 : 0;
 
   return { totalValue, dailyPnl, dailyPnlPercent };
@@ -45,16 +45,16 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
     const { positions, cash } = get();
     const updated = positions.map((p) => {
       if (p.symbol !== symbol) return p;
-      const marketValue = price * p.quantity;
-      const unrealizedPnl = (price - p.avgCost) * p.quantity;
-      const unrealizedPnlPercent =
-        p.avgCost > 0 ? ((price - p.avgCost) / p.avgCost) * 100 : 0;
+      const market_value = price * p.qty;
+      const unrealized_pnl = (price - p.avg_cost) * p.qty;
+      const unrealized_pnl_pct =
+        p.avg_cost > 0 ? ((price - p.avg_cost) / p.avg_cost) * 100 : 0;
       return {
         ...p,
-        currentPrice: price,
-        marketValue,
-        unrealizedPnl,
-        unrealizedPnlPercent,
+        current_price: price,
+        market_value,
+        unrealized_pnl,
+        unrealized_pnl_pct,
       };
     });
     const calculated = recalculate(updated, cash);
