@@ -13,6 +13,7 @@ from src.api.routes import (
     filings,
     orders,
     portfolio,
+    risk,
     screener,
     signals,
     system,
@@ -149,6 +150,7 @@ app.include_router(tickers.router)
 app.include_router(signals.router)
 app.include_router(orders.router)
 app.include_router(portfolio.router)
+app.include_router(risk.router)
 app.include_router(screener.router)
 app.include_router(system.router)
 app.include_router(filings.router)

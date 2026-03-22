@@ -155,8 +155,8 @@ See [`docs/research/`](docs/research/) for comprehensive research:
 ## Implementation Roadmap
 
 - [x] **Phase 1**: Foundation — Docker, backend scaffold, frontend scaffold, DB schema
-- [ ] **Phase 2**: Data Pipeline — Polygon WebSocket, EDGAR monitor, FINRA short interest, signal engine
-- [ ] **Phase 3**: AI Integration — Qwen/Claude routing, screener presets, insight cards
+- [x] **Phase 2**: Data Pipeline — Polygon WebSocket, EDGAR monitor, FINRA short interest, signal engine
+- [x] **Phase 3**: AI Integration — Claude router (Qwen-ready), screener presets, filing/watchlist APIs
 - [ ] **Phase 4**: Execution — OMS, Alpaca paper trading, risk engine, compliance
 - [ ] **Phase 5**: Frontend Dashboard — Charts, AG Grid, WebSocket live data, all tabs
 - [ ] **Phase 6**: Backtesting & Polish — VectorBT, morning briefings, command palette
