@@ -1,0 +1,188 @@
+# =============================================================================
+# Small-Cap Trading Platform - Docker Compose
+# =============================================================================
+# Usage:
+#   docker compose up -d                  # Start core services
+#   docker compose --profile gpu up -d    # Start with Ollama GPU support
+#   docker compose up -d --build          # Rebuild and start
+#   docker compose logs -f backend        # Tail backend logs
+#   docker compose down -v                # Stop and remove volumes (DESTRUCTIVE)
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 - Primary relational database
+  # Stores: user accounts, portfolio state, trade history, signals, filings
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: trading-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: trader
+      POSTGRES_PASSWORD: trader
+      POSTGRES_DB: trading
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - trading-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trader -d trading"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # QuestDB 8.2 - Time-series database for market data
+  # Stores: OHLCV bars, tick data, intraday signals, performance metrics
+  # Ports: 9000 (HTTP/console), 9009 (ILP ingestion), 8812 (PG wire)
+  # ---------------------------------------------------------------------------
+  questdb:
+    image: questdb/questdb:8.2.1
+    container_name: trading-questdb
+    restart: unless-stopped
+    ports:
+      - "9000:9000"   # Web console + REST API
+      - "9009:9009"   # InfluxDB Line Protocol (high-speed ingestion)
+      - "8812:8812"   # PostgreSQL wire protocol (SQL queries)
+    volumes:
+      - questdb_data:/var/lib/questdb
+    networks:
+      - trading-net
+    environment:
+      QDB_LOG_W_STDOUT_LEVEL: ERROR
+      QDB_PG_USER: admin
+      QDB_PG_PASSWORD: quest
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 - Cache, pub/sub, and task queue
+  # Used for: WebSocket broadcast, rate limiting, signal dedup, session cache
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: trading-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - trading-net
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Ollama - Local LLM inference (optional, GPU profile)
+  # Used for: local AI signal analysis, filing summarization
+  # Start with: docker compose --profile gpu up -d
+  # ---------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: trading-ollama
+    restart: unless-stopped
+    profiles:
+      - gpu
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    networks:
+      - trading-net
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  # Backend - FastAPI application server
+  # Runs: REST API, WebSocket feeds, signal workers, data pipelines
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: trading-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      questdb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Override localhost URLs to use Docker service names
+      DATABASE_URL: postgresql+asyncpg://trader:trader@postgres:5432/trading
+      QUESTDB_URL: http://questdb:9000
+      QUESTDB_ILP_HOST: questdb:9009
+      REDIS_URL: redis://redis:6379
+      OLLAMA_URL: http://ollama:11434
+    volumes:
+      # Mount source for live reload during development
+      - ./backend/src:/app/src:cached
+    networks:
+      - trading-net
+
+  # ---------------------------------------------------------------------------
+  # Frontend - Next.js 15 development server
+  # Runs: React 19 UI with TradingView charts, AG Grid, ECharts
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: trading-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    volumes:
+      # Mount source for Next.js fast refresh during development
+      - ./frontend/src:/app/src:cached
+      - ./frontend/public:/app/public:cached
+    networks:
+      - trading-net
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  trading-net:
+    driver: bridge
+    name: trading-net
+
+# =============================================================================
+# Named volumes for data persistence
+# =============================================================================
+volumes:
+  postgres_data:
+    name: trading-postgres-data
+  questdb_data:
+    name: trading-questdb-data
+  redis_data:
+    name: trading-redis-data
+  ollama_models:
+    name: trading-ollama-models
